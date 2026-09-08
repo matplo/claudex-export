@@ -17,6 +17,7 @@ from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
 from .session import Entry, Session
+from .privacy import duration_text, prepare_export
 
 
 def embedded_image(ref: str) -> bool:
@@ -90,7 +91,8 @@ def label(entry: Entry) -> str:
     return {"user": "You", "tool": entry.name or "Tool", "marker": "Session event"}[entry.kind]
 
 
-def render_html(session: Session, include_tools: bool = True) -> str:
+def render_html(session: Session, include_tools: bool = True, *, full: bool = False, redact=()) -> str:
+    session = prepare_export(session, full=full, redact=redact)
     md = markdown_engine()
     entries = [e for e in session.entries if include_tools or e.kind != "tool"]
     escape = html.escape
@@ -106,7 +108,8 @@ def render_html(session: Session, include_tools: bool = True) -> str:
             body = f'<div class="marker" id="entry-{number}">{escape(entry.text)} {time}</div>'
         else:
             final_class = " final" if entry.kind == "assistant" and entry.phase in {"final", "final_answer"} else ""
-            body = f'<article class="message {entry.kind}{final_class}" id="entry-{number}"><header><span>{escape(label(entry))}</span>{time}<a class="permalink" href="#entry-{number}" aria-label="Link to message {number}">#</a></header><div class="prose">{md.render(entry.text)}{images}</div></article>'
+            text = entry.text if full else markdown_text(entry.text, omit_links=True)
+            body = f'<article class="message {entry.kind}{final_class}" id="entry-{number}"><header><span>{escape(label(entry))}</span>{time}<a class="permalink" href="#entry-{number}" aria-label="Link to message {number}">#</a></header><div class="prose">{md.render(text)}{images}</div></article>'
         sections.append(body)
     warning_html = ""
     if session.warnings:
@@ -117,13 +120,18 @@ def render_html(session: Session, include_tools: bool = True) -> str:
     count = sum(e.kind in {"user", "assistant"} for e in entries)
     tools = sum(e.kind == "tool" for e in entries)
     controls = '<button type="button" id="expand">Expand tools</button><button type="button" id="collapse">Collapse tools</button>' if tools else ""
+    metadata = [("Session", session.id), ("Started", session.timestamp or "Unknown"), ("Directory", session.cwd or "Unknown")] if full else [("Date", session.timestamp or "Unknown")]
+    if session.duration_seconds is not None:
+        metadata.append(("Elapsed", duration_text(session.duration_seconds)))
+    metadata_html = "".join(f"<div><dt>{key}</dt><dd>{escape(value)}</dd></div>" for key, value in metadata)
+    subtitle = f"{count} messages" + (f" <span>·</span> {tools} tool calls" if full else "")
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-{script_hash}'; base-uri 'none'; form-action 'none'">
 <title>{escape(session.title)} · {provider_name} session</title><style>{css}</style></head>
 <body><main><div class="eyebrow">{provider_name.upper()} / SESSION EXPORT</div><section class="session-header"><h1>{escape(session.title)}</h1>
-<p class="subtitle">{count} messages <span>·</span> {tools} tool calls <span>·</span> Saved for reading</p>
-<dl><div><dt>Session</dt><dd>{escape(session.id)}</dd></div><div><dt>Started</dt><dd>{escape(session.timestamp or 'Unknown')}</dd></div><div><dt>Directory</dt><dd>{escape(session.cwd or 'Unknown')}</dd></div></dl>
+<p class="subtitle">{subtitle} <span>·</span> Saved for reading</p>
+<dl>{metadata_html}</dl>
 <div class="controls">{controls}<button type="button" id="print">Print / save PDF</button></div></section>
 {warning_html}<section class="transcript" aria-label="Conversation">{''.join(sections) or '<p class="muted">No conversation messages recorded.</p>'}</section>
 <footer>Exported locally with claudex-export</footer></main><script>{script}</script></body></html>'''
@@ -140,7 +148,7 @@ def plain_markdown(text: str) -> str:
     return re.sub(r"([\\`*_{}\[\]()#+.!|>~-])", r"\\\1", html.escape(text))
 
 
-def markdown_text(text: str) -> str:
+def markdown_text(text: str, *, omit_links: bool = False) -> str:
     """Sanitize prose using parser source positions; leave code verbatim."""
     md = MarkdownIt("commonmark", {"html": True, "store_labels": True})
     # Recognize unsafe destinations too, so they can be explicitly removed.
@@ -178,14 +186,14 @@ def markdown_text(text: str) -> str:
             elif kind == "image":
                 token = next(t for t in added if t.type == "image")
                 ref = token.attrGet("src") or ""
-                replacement = f"![{plain_markdown(token.content)}](<{ref}>)" if embedded_image(ref) else plain_markdown(unavailable_image(ref))
+                replacement = "[Image omitted]" if omit_links else f"![{plain_markdown(token.content)}](<{ref}>)" if embedded_image(ref) else plain_markdown(unavailable_image(ref))
                 edits.append((start, state.pos, replacement))
             else:
                 token = next(t for t in added if t.type == "link_open")
                 ref = token.attrGet("href") or ""
-                if not safe_link(ref):
+                if omit_links or not safe_link(ref):
                     visible = "".join(t.content for t in added if t.type in {"text", "code_inline"})
-                    edits.append((start, state.pos, plain_markdown(visible) + " (unsafe link omitted)"))
+                    edits.append((start, state.pos, plain_markdown(visible) + ("" if omit_links else " (unsafe link omitted)")))
                 elif token.meta.get("label"):
                     # Replace only the reference suffix so nested image edits
                     # inside the label can still be applied independently.
@@ -209,9 +217,13 @@ def markdown_text(text: str) -> str:
     return "".join(output)
 
 
-def render_markdown(session: Session, include_tools: bool = True) -> str:
+def render_markdown(session: Session, include_tools: bool = True, *, full: bool = False, redact=()) -> str:
+    session = prepare_export(session, full=full, redact=redact)
     provider_name = "Claude Code" if session.provider == "claude" else "Codex"
-    parts = [f"# {plain_markdown(session.title)}", f"- **Source:** {provider_name}\n- **Session:** {plain_markdown(session.id)}\n- **Started:** {plain_markdown(session.timestamp or 'Unknown')}\n- **Directory:** {plain_markdown(session.cwd or 'Unknown')}"]
+    metadata = f"- **Source:** {provider_name}\n- **Session:** {plain_markdown(session.id)}\n- **Started:** {plain_markdown(session.timestamp or 'Unknown')}\n- **Directory:** {plain_markdown(session.cwd or 'Unknown')}" if full else f"- **Date:** {plain_markdown(session.timestamp or 'Unknown')}"
+    if session.duration_seconds is not None:
+        metadata += f"\n- **Elapsed:** {duration_text(session.duration_seconds)}"
+    parts = [f"# {plain_markdown(session.title)}", metadata]
     if session.warnings:
         parts.extend(["## Export notes", "\n".join(f"- {plain_markdown(w)}" for w in session.warnings)])
     for entry in session.entries:
@@ -225,7 +237,7 @@ def render_markdown(session: Session, include_tools: bool = True) -> str:
         elif entry.kind == "marker":
             parts.append(plain_markdown(entry.text))
         else:
-            parts.append(markdown_text(entry.text))
+            parts.append(markdown_text(entry.text, omit_links=not full))
         for ref in entry.images:
             parts.append(f"![Session image]({ref})" if embedded_image(ref) else plain_markdown(unavailable_image(ref)))
     return "\n\n".join(parts).rstrip() + "\n"

@@ -13,20 +13,24 @@ from textual.widgets import DataTable, Footer, Header, Input, Static, TextArea
 
 from .discovery import Candidate, terminal_text
 from .session import read_session, user_prompts
+from .privacy import duration_text, prepare_export
 
 
-def prompt_preview(candidate: Candidate) -> str:
+def prompt_preview(candidate: Candidate, full: bool = False, redact=()) -> str:
     session = read_session(candidate.path, candidate.provider)
+    session.title = candidate.title
+    session = prepare_export(session, full=full, redact=redact)
     prompts = user_prompts(session)
     total = len(prompts)
-    lines = [f"{candidate.title}\n{candidate.provider.upper()} · {candidate.cwd}\n{candidate.id}", f"{total} user prompts · first 10 and last 10 (overlap shown once)"]
+    metadata = f"{session.title}\n{candidate.provider.upper()} · {candidate.cwd}\n{candidate.id}" if full else f"{session.title}\nDate: {session.timestamp or 'Unknown'}" + (f" · Elapsed: {duration_text(session.duration_seconds)}" if session.duration_seconds is not None else "")
+    lines = [metadata, f"{total} user prompts · first 10 and last 10 (overlap shown once)"]
     indexes = sorted(set(range(min(10, total))) | set(range(max(0, total - 10), total)))
     previous = -1
     for index in indexes:
         if index > previous + 1:
             lines.append(f"── {index - previous - 1} middle prompts omitted ──")
         entry = prompts[index]
-        lines.append(f"── Prompt {index + 1} · {entry.timestamp or 'time unavailable'} ──\n{entry.text or '[Image-only prompt]'}" + (f"\n[{len(entry.images)} attached image(s)]" if entry.images else ""))
+        lines.append(f"── Prompt {index + 1}" + (f" · {entry.timestamp}" if entry.timestamp else "") + f" ──\n{entry.text or '[Image-only prompt]'}" + (f"\n[{len(entry.images)} attached image(s)]" if entry.images else ""))
         previous = index
     if not prompts:
         lines.append("No user prompts recorded in this session.")
@@ -37,7 +41,7 @@ def prompt_preview(candidate: Candidate) -> str:
 
 
 class PreviewScreen(ModalScreen[Candidate | None]):
-    BINDINGS = [Binding("escape,v", "close", "Back", priority=True), Binding("e", "export", "Export session", priority=True)]
+    BINDINGS = [Binding("escape,v", "close", "Back", priority=True), Binding("e", "export", "Export session", priority=True), Binding("f", "toggle_full", "Toggle full export", priority=True)]
     DEFAULT_CSS = """
     PreviewScreen { align: center middle; background: $background 65%; }
     #preview-dialog { width: 94%; height: 92%; border: round #a4c9bb; background: $surface; }
@@ -55,7 +59,7 @@ class PreviewScreen(ModalScreen[Candidate | None]):
         with Vertical(id="preview-dialog"):
             yield Static("USER PROMPTS", id="preview-title")
             yield TextArea("Loading prompts…", read_only=True, soft_wrap=True, id="prompts")
-            yield Static("↑↓ / Page Up/Down: scroll   •   Esc / v: back   •   e: export", id="preview-help")
+            yield Static("Esc / v: back   •   e: export   •   f: toggle full / sanitized", id="preview-help")
 
     def on_mount(self) -> None:
         self.query_one(TextArea).focus()
@@ -63,8 +67,10 @@ class PreviewScreen(ModalScreen[Candidate | None]):
 
     @work(exclusive=True)
     async def load_preview(self) -> None:
+        self.ready = False
+        self.query_one("#preview-title", Static).update("USER PROMPTS · " + ("FULL — identifying data included" if self.app.full else "SANITIZED"))
         try:
-            text = await asyncio.to_thread(prompt_preview, self.candidate)
+            text = await asyncio.to_thread(prompt_preview, self.candidate, self.app.full, self.app.redact)
             self.ready = True
         except (OSError, ValueError, UnicodeError) as exc:
             text = f"Could not preview this session:\n{exc}\n\nPress Esc to return to the list."
@@ -72,6 +78,10 @@ class PreviewScreen(ModalScreen[Candidate | None]):
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+    def action_toggle_full(self) -> None:
+        self.app.action_toggle_full()
+        self.load_preview()
 
     def action_export(self) -> None:
         if self.ready:
@@ -81,27 +91,31 @@ class PreviewScreen(ModalScreen[Candidate | None]):
 class SessionPicker(App[Candidate | None]):
     TITLE = "Claudex Export"
     SUB_TITLE = "Codex + Claude Code"
-    BINDINGS = [Binding("v", "preview", "View prompts"), Binding("slash", "search", "Search"), Binding("escape", "back", "Clear / focus list"), Binding("q", "cancel", "Quit"), Binding("ctrl+c", "cancel", "Quit", show=False, priority=True)]
+    BINDINGS = [Binding("v", "preview", "View prompts"), Binding("f", "toggle_full", "Full / sanitized"), Binding("slash", "search", "Search"), Binding("escape", "back", "Clear / focus list"), Binding("q", "cancel", "Quit"), Binding("ctrl+c", "cancel", "Quit", show=False, priority=True)]
     CSS = """
     Screen { background: #18262b; }
     Header { background: #25413f; }
     #search { margin: 1 2; border: round #779f91; }
     #status { height: 1; margin: 0 2 1 2; color: #a9c8be; }
+    #mode { height: 2; margin: 0 2; color: #c8dfef; }
     DataTable { height: 1fr; margin: 0 2; }
     DataTable > .datatable--cursor { background: #c1ded0; color: #172e2b; text-style: bold; }
     #help { height: 2; margin: 1 2 0 2; color: #b2c7d4; }
     Footer { background: #25413f; }
     """
 
-    def __init__(self, candidates: list[Candidate]):
+    def __init__(self, candidates: list[Candidate], *, full: bool = False, redact=()):
         super().__init__()
         self.candidates = candidates
         self.matches = candidates
+        self.full = full
+        self.redact = redact
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Input(placeholder="Search title, directory, session ID, or provider…  (/ to focus)", id="search")
         yield Static("", id="status", markup=False)
+        yield Static("", id="mode", markup=False)
         yield DataTable(id="sessions", cursor_type="row", zebra_stripes=True)
         yield Static("↑↓ navigate   •   Enter export   •   v preview first / last 10 prompts", id="help")
         yield Footer()
@@ -114,6 +128,7 @@ class SessionPicker(App[Candidate | None]):
         table.add_column("Directory", width=42)
         table.add_column("ID", width=8)
         self.refresh_rows("")
+        self.update_mode()
         table.focus()
 
     def refresh_rows(self, query: str) -> None:
@@ -164,6 +179,14 @@ class SessionPicker(App[Candidate | None]):
     def action_cancel(self) -> None:
         self.exit(None)
 
+    def update_mode(self) -> None:
+        self.screen_stack[0].query_one("#mode", Static).update("  Export: FULL — identifying data, tools, images included" if self.full else "  Export: SANITIZED — user prompts and assistant replies")
 
-def pick_tui(candidates: list[Candidate]) -> Candidate | None:
-    return SessionPicker(candidates).run()
+    def action_toggle_full(self) -> None:
+        self.full = not self.full
+        self.update_mode()
+
+
+def pick_tui(candidates: list[Candidate], *, full: bool = False, redact=()) -> tuple[Candidate | None, bool]:
+    app = SessionPicker(candidates, full=full, redact=redact)
+    return app.run(), app.full

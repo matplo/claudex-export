@@ -41,6 +41,8 @@ class Session:
     entries: list[Entry] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     provider: str = "codex"
+    duration_seconds: float | None = None
+    identifiers: list[str] = field(default_factory=list, repr=False)
 
 
 def pretty(value: Any) -> str:
@@ -316,11 +318,15 @@ def read_session(path: Path, provider: str = "auto") -> Session:
             provider = "codex"
     if provider == "claude":
         from .claude import read_claude_session
-        return read_claude_session(path)
-    return read_codex_session(path)
+        session = read_claude_session(path)
+    else:
+        session = read_codex_session(path)
+    from .privacy import collect_metadata
+    collect_metadata(session)
+    return session
 
 
 def user_prompts(session: Session) -> list[Entry]:
     """Actual user inputs for previews, excluding injected context and results."""
     return [entry for entry in session.entries if entry.kind == "user" and entry.is_prompt
-            and not entry.text.lstrip().startswith(("# AGENTS.md instructions", "<environment_context>", "<INSTRUCTIONS>", "<local-command-caveat>", "<local-command-stdout>", "[Request interrupted"))]
+            and not entry.text.lstrip().startswith(("# AGENTS.md instructions", "<environment_context>", "<INSTRUCTIONS>", "<user_shell_command>", "<local-command-caveat>", "<local-command-stdout>", "[Request interrupted"))]

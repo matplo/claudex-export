@@ -5,6 +5,13 @@ or **Markdown**. Run `claudex-export`
 without a filename to browse both providers in a full-screen Textual picker.
 Preview the first and last 10 user prompts before choosing a session.
 
+**Exports are sanitized by default.** They contain the session date, title,
+recorded elapsed time when available, direct user prompts, and assistant
+progress/final replies. Tools, execution plans, injected context, images,
+session IDs, working directories, and individual message timestamps are omitted.
+Use `--full` to restore the previous detailed transcript, or press `f` in the
+Textual picker or preview to toggle between sanitized and full export.
+
 Requires Python 3.10 or later. No API key or service is needed.
 
 ## Install
@@ -31,6 +38,12 @@ claudex-export --source claude
 # Auto-detect a Claude Code file and export both formats
 claudex-export /path/to/claude-session.jsonl --format both -o exports
 
+# Opt in to metadata, original messages, tool details, and images
+claudex-export /path/to/session.jsonl --full -o detailed.html
+
+# Remove additional names or literal strings from sanitized output
+claudex-export /path/to/session.jsonl --redact 'Jane Doe' --redact 'Acme Private Project'
+
 # Export a specified rollout
 claudex-export /path/to/rollout.jsonl -o conversation.html
 
@@ -54,14 +67,15 @@ provider names. Enter in the search box returns focus to the results.
 | `↑` / `↓` | Move between sessions |
 | `Enter` on a session | Select and export |
 | `v` | Preview the selected session's user prompts |
+| `f` in list or preview | Toggle sanitized/full export; current mode is displayed |
 | `Esc` / `v` in preview | Return to the list |
 | `e` in preview | Select and export the previewed session |
 | `/` | Focus search |
 | `Esc` in list | Clear search and focus the list |
 | `q` / `Ctrl+C` | Cancel |
 
-Previews are scrollable and loaded in a background worker. They show complete
-prompt text with original numbering and timestamps: the first 10 and last 10,
+Previews are scrollable and loaded in a background worker. They follow the selected
+export mode and show prompt text with original numbering: the first 10 and last 10,
 without duplicates where those ranges overlap. For longer sessions a marker
 shows how many middle prompts were omitted. Tool results, injected context, and
 compaction summaries are excluded from the prompt preview. Images are counted,
@@ -71,10 +85,36 @@ Use `--plain-picker` for the original numbered terminal picker (`/search`,
 `n`/`p`, number to select, `q` to cancel); prompt previews require the Textual
 picker. Without an interactive terminal, supply an explicit input file.
 
-By default, exports are written to the current directory with a sanitized title
-and session ID in the filename. `-o` is a file path for a single format and a
+By default, exports are written to the current directory with the date and a
+redacted title in the filename. Full exports use the original title and session
+ID. `-o` is a file path for a single format and a
 directory for `--format both`. Parent directories are created as needed.
 Existing files require `--force`; the source session is never overwritten.
+
+## Sanitization and full exports
+
+The same defaults apply to HTML and Markdown, including `--format both`.
+Sanitization removes recognizable email addresses, IP/MAC addresses, common
+phone-number formats, UUIDs, local paths, local hostnames, and known identity
+values from metadata and local account information. It also redacts those values
+in titles, prose, and code blocks. Links lose their destinations and image
+payloads are omitted. Generated filenames exclude the session ID and redact the
+title; an explicitly supplied `-o` name is used as given.
+
+This is deterministic, local, **best-effort** redaction. It cannot identify every
+person's name, street address, organization, or other identifying fact in arbitrary
+prose. Review a file before sharing it and supply repeatable `--redact TEXT`
+arguments for additional names or strings. No external service is used.
+
+Elapsed time is the span between recorded timestamps and includes idle time;
+it is omitted if the log does not provide distinct usable timestamps.
+
+`--full` disables sanitization and restores metadata, original conversation text,
+tools, images, and session event markers. `--no-tools` can still suppress tools
+in full mode. `--redact` applies only to sanitized mode. Full mode does not add
+raw system/developer instructions, reasoning, usage records, or unknown records
+that the parser has always excluded. The local picker still displays directories
+and IDs to help identify a session; they are not included in sanitized exports.
 
 ## Supported content
 
@@ -84,14 +124,15 @@ Existing files require `--force`; the source session is never overwritten.
 - `.json` containing a single native session record or an array of records.
   Codex records use `type`/`payload`; Claude Code uses `type`/`message` and
   session metadata. Arbitrary chat JSON formats are not supported.
-- User messages, assistant progress and final replies, tool inputs/results,
-  and markers for compaction/interruption, in recorded order.
+- User messages and assistant progress/final replies in recorded order. Tool
+  inputs/results and compaction/interruption markers are included with `--full`.
 - Native transcript records take priority over matching completion events.
   Duplicates are matched by IDs and by content within each turn, one occurrence
   at a time. Separate repeated messages remain present.
 - System/developer messages, reasoning, usage records, and replacement history
   from compaction are omitted. Instructions stored as actual **user** messages
-  remain part of the transcript.
+  remain part of the full transcript. Known injected context is omitted in
+  sanitized mode.
 - Tools invoked inside an orchestration tool may appear as separate execution
   events as well as in that tool's output: these describe nested operations.
 - Claude Code tool-use blocks pair with tool results by tool-use ID. Replayed
@@ -104,7 +145,7 @@ anchors, collapsed tool details, expand/collapse buttons, and a print button.
 It uses embedded CSS/JavaScript and works offline. Printing expands tool details.
 Markdown keeps conversation formatting and uses fenced blocks for tool data.
 
-Embedded PNG, JPEG, GIF, and WebP data images are preserved. Other image
+With `--full`, embedded PNG, JPEG, GIF, and WebP data images are preserved. Other image
 references become placeholders; the exporter does not fetch remote images or
 read image paths from the transcript. Raw HTML is escaped in conversation prose;
 HTML exports restrict scripts and resource loads with a Content Security Policy.
@@ -123,8 +164,8 @@ session inclusion applies to Codex. Source files and databases are never modifie
 Unknown record types and malformed JSONL lines produce warnings. An incomplete
 final line in a running session is skipped; rerun the export later to include it.
 Local session formats can evolve, so inspect export notes when a newer record type
-appears. Exports contain the selected conversation and tool data as stored;
-there is no automatic secret redaction.
+appears. Full exports contain the selected conversation and tool data as stored;
+sanitized exports apply the redaction described above.
 
 ## Development
 

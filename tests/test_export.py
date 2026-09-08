@@ -57,7 +57,7 @@ def test_transcript_deduplication_tools_and_omissions(tmp_path, records):
     assert session.entries[2].result.startswith("hello")
     assert session.title == "Build a **small** exporter"
     assert session.cwd == "/work/demo"
-    output = render_html(session)
+    output = render_html(session, full=True)
     assert "private" not in output
     assert "<table>" in output and 'class="highlight"' in output
     assert "&lt;script&gt;bad()&lt;/script&gt;" in output
@@ -124,7 +124,7 @@ PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l
 
 def test_html_images_links_escaping_and_no_remote_assets():
     session = Session(Path("unused.jsonl"), title="<script>title</script>", entries=[Entry("user", text='<script>alert(1)</script>\n\n[bad](javascript:alert%281%29) [good](https://example.com)\n\n![remote](https://example.com/image.png)', images=[PNG, "/tmp/private.png", "data:image/svg+xml;base64,PHN2Zz4="])])
-    output = render_html(session)
+    output = render_html(session, full=True)
     assert '<script>alert(1)</script>' not in output
     assert '&lt;script&gt;title&lt;/script&gt;' in output
     assert 'href="javascript:' not in output
@@ -140,7 +140,7 @@ def test_html_images_links_escaping_and_no_remote_assets():
 
 def test_markdown_preserves_code_and_uses_safe_fences(tmp_path, records):
     session = read_session(save(tmp_path, records))
-    output = render_markdown(session)
+    output = render_markdown(session, full=True)
     assert "**small**" in output
     assert "```python\nprint('hello')\n```" in output
     assert "````\nhello\n```" in output
@@ -277,8 +277,8 @@ def test_markdown_references_raw_html_and_code():
 
 def test_inline_embedded_image_is_rendered():
     session = Session(Path("unused.jsonl"), entries=[Entry("user", text=f"![tiny]({PNG})")])
-    assert f'src="{PNG}"' in render_html(session)
-    assert f"(<{PNG}>)" in render_markdown(session)
+    assert f'src="{PNG}"' in render_html(session, full=True)
+    assert f"(<{PNG}>)" in render_markdown(session, full=True)
 
 
 def test_code_blocks_have_valid_html_structure(tmp_path, records):
@@ -301,7 +301,7 @@ def test_code_blocks_have_valid_html_structure(tmp_path, records):
                 self.depth -= 1
 
     checker = CodeStructure()
-    checker.feed(render_html(read_session(save(tmp_path, records))))
+    checker.feed(render_html(read_session(save(tmp_path, records)), full=True))
     assert checker.count >= 3
     assert checker.depth == 0
 
