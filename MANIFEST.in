@@ -1,0 +1,9 @@
+include README.md
+include pyproject.toml
+include LICENSE
+recursive-include src/codex_export *.py *.css *.js
+recursive-include tests *.py
+recursive-include examples *.jsonl
+recursive-include scripts *.py
+prune exports
+global-exclude __pycache__ *.py[cod] .DS_Store
