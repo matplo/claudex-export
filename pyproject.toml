@@ -11,7 +11,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{name = "matplo"}]
 requires-python = ">=3.10"
-dependencies = ["markdown-it-py>=3,<5", "Pygments>=2.17,<3", "textual>=6.12,<7"]
+dependencies = ["markdown-it-py>=3,<5", "Pygments>=2.17,<3", "textual>=8.2,<9"]
 keywords = ["codex", "claude", "sessions", "markdown", "html", "textual"]
 classifiers = [
     "Development Status :: 4 - Beta",
