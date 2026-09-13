@@ -126,7 +126,8 @@ def test_relative_image_and_link_destinations_removed_from_title_and_prose():
         assert "Read this" in output
 
 
-def test_cli_uses_tui_full_selection(tmp_path, monkeypatch):
+def test_cli_resumes_tui_selection(tmp_path, monkeypatch):
+    import os
     import sys
     from io import StringIO
 
@@ -141,6 +142,11 @@ def test_cli_uses_tui_full_selection(tmp_path, monkeypatch):
     monkeypatch.setattr("codex_export.tui.pick_tui", lambda candidates, **kwargs: (candidate, True))
     monkeypatch.setattr(sys, "stdin", Terminal())
     monkeypatch.setattr(sys, "stdout", Terminal())
-    output = tmp_path / "selected.html"
-    assert main(["-o", str(output)]) == 0
-    assert "alice-host" in output.read_text()
+    calls = []
+    # Selecting a session in the Textual picker resumes it (execs into the
+    # provider CLI) rather than exporting; os.execvp must never really run here.
+    monkeypatch.setattr(os.path, "isdir", lambda path: True)
+    monkeypatch.setattr(os, "chdir", lambda path: calls.append(("chdir", path)))
+    monkeypatch.setattr(os, "execvp", lambda program, argv: calls.append(("execvp", program, argv)))
+    assert main([]) == 0
+    assert calls == [("chdir", "/Users/alice/project"), ("execvp", "codex", ["codex", "resume", "secret-id"])]

@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+import sys
 
 from textual.widgets import DataTable, Input, TextArea
 
@@ -7,7 +9,8 @@ from codex_export.cli import main
 from codex_export.discovery import Candidate, discover_all, discover_claude
 from codex_export.render import render_html, render_markdown
 from codex_export.session import read_session, user_prompts
-from codex_export.tui import PreviewScreen, SessionPicker, prompt_preview
+from codex_export import tui as tui_module
+from codex_export.tui import ExportResultScreen, PreviewScreen, SessionPicker, prompt_preview
 
 
 def claude(kind, content, uuid, **extra):
@@ -123,7 +126,7 @@ def test_tui_search_preview_return_selection_and_cancel(tmp_path):
 def test_tui_empty_search_preview_error_and_export_from_preview(tmp_path):
     async def run():
         c = candidate(tmp_path, 1)
-        app = SessionPicker([c])
+        app = SessionPicker([c], output=tmp_path / "preview-export.html")
         async with app.run_test(size=(80, 24)) as pilot:
             app.query_one(Input).value = "nothing matches"
             await pilot.pause()
@@ -133,7 +136,15 @@ def test_tui_empty_search_preview_error_and_export_from_preview(tmp_path):
             await app.workers.wait_for_complete()
             await pilot.pause()
             await pilot.press("e")
-        assert app.return_value == c
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert isinstance(app.screen, ExportResultScreen)
+            assert "EXPORT COMPLETE" in app.screen.query_one("#export-title").render().plain
+            await pilot.press("escape")
+            await pilot.pause()
+            assert len(app.screen_stack) == 1
+        assert app.return_value is None
+        assert list(tmp_path.glob("*.html"))
         broken = Candidate(tmp_path / "missing.jsonl", "missing", "Missing file", "", 0)
         app = SessionPicker([broken])
         async with app.run_test() as pilot:
@@ -143,6 +154,35 @@ def test_tui_empty_search_preview_error_and_export_from_preview(tmp_path):
             assert "Could not preview" in app.screen.query_one(TextArea).text
             await pilot.press("e")
             assert isinstance(app.screen, PreviewScreen)
+            await pilot.press("escape", "q")
+    asyncio.run(run())
+
+
+def test_tui_export_from_list_success_and_failure(tmp_path):
+    async def run():
+        c = candidate(tmp_path, 1)
+        app = SessionPicker([c], output=tmp_path / "list-export.html")
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            await pilot.press("e")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert isinstance(app.screen, ExportResultScreen)
+            assert "EXPORT COMPLETE" in app.screen.query_one("#export-title").render().plain
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.query_one(DataTable).has_focus
+        assert list(tmp_path.glob("*.html"))
+
+        broken = Candidate(tmp_path / "missing.jsonl", "missing", "Missing file", "", 0)
+        app = SessionPicker([broken], output=tmp_path)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("e")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            assert isinstance(app.screen, ExportResultScreen)
+            assert "EXPORT FAILED" in app.screen.query_one("#export-title").render().plain
             await pilot.press("escape", "q")
     asyncio.run(run())
 
@@ -161,3 +201,25 @@ def test_wrong_explicit_source_fails_without_export(tmp_path):
     target = tmp_path / "wrong.html"
     assert main([str(path), "--source", "claude", "-o", str(target)]) == 1
     assert not target.exists()
+
+
+def test_cli_resume_execs_provider_binary_from_session_cwd(tmp_path, monkeypatch):
+    save(tmp_path / "claude_home" / "projects/p/main.jsonl", [claude("user", "Hi", "u")])
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "missing"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude_home"))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    calls = []
+    monkeypatch.setattr(os, "chdir", lambda path: calls.append(("chdir", path)))
+    monkeypatch.setattr(os, "execvp", lambda program, argv: calls.append(("execvp", program, argv)))
+
+    claude_target = Candidate(tmp_path / "demo.jsonl", "claude-demo", "Demo", str(tmp_path), 0, provider="claude")
+    monkeypatch.setattr(tui_module, "pick_tui", lambda candidates, **kwargs: (claude_target, kwargs.get("full", False)))
+    assert main([]) == 0
+    assert calls == [("chdir", str(tmp_path)), ("execvp", "claude", ["claude", "--resume", "claude-demo"])]
+
+    calls.clear()
+    codex_target = Candidate(tmp_path / "demo.jsonl", "codex-demo", "Demo", "", 0, provider="codex")
+    monkeypatch.setattr(tui_module, "pick_tui", lambda candidates, **kwargs: (codex_target, kwargs.get("full", False)))
+    assert main([]) == 0
+    assert calls == [("execvp", "codex", ["codex", "resume", "codex-demo"])]

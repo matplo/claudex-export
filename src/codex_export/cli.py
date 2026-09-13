@@ -52,6 +52,17 @@ def destinations(session: Session, format: str, output: Path | None, *, full: bo
     return [(directory / f"{name}.{extension}", extension) for extension in formats]
 
 
+def export_selection(candidate, home: Path, format: str, output: Path | None, no_tools: bool, force: bool, *, full: bool = False, redact=()) -> tuple[list[Path], list[str]]:
+    """Export a picker-discovered candidate. Its provider is already known, so
+    unlike the explicit-SESSION_FILE path there is no format to auto-detect."""
+    session = read_session(candidate.path.expanduser(), candidate.provider)
+    indexed = read_index(home).get(session.id, {}).get("thread_name") if session.provider == "codex" else None
+    session.title = str(indexed or candidate.title)
+    targets = destinations(session, format, output, full=full, redact=redact)
+    paths = write_exports(session, targets, not no_tools, force, full=full, redact=redact)
+    return paths, session.warnings
+
+
 def write_exports(session: Session, targets: list[tuple[Path, str]], include_tools: bool, force: bool, *, full: bool = False, redact=()) -> list[Path]:
     # Check every destination before writing either format.
     for path, _ in targets:
@@ -81,39 +92,61 @@ def write_exports(session: Session, targets: list[tuple[Path, str]], include_too
     return written
 
 
+def resume_command(candidate) -> list[str]:
+    if candidate.provider == "claude":
+        return ["claude", "--resume", candidate.id]
+    return ["codex", "resume", candidate.id]
+
+
+def resume_session(candidate) -> None:
+    """Replace this process with the provider CLI resuming the given session.
+    Never returns on success; a missing binary or bad cwd raises OSError,
+    which the caller's existing error handling already reports."""
+    if candidate.cwd and os.path.isdir(candidate.cwd):
+        os.chdir(candidate.cwd)
+    argv = resume_command(candidate)
+    os.execvp(argv[0], argv)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     home = codex_home(args.codex_home)
     try:
-        selected = None
         source = args.session_file
-        if source is None:
-            if not sys.stdin.isatty() or not sys.stdout.isatty():
-                raise SessionError("No session file supplied. In a noninteractive terminal, pass a .jsonl or .json path: claudex-export SESSION_FILE")
-            candidates, warnings = discover_all(home, claude_home(args.claude_home), args.source, args.include_archived)
-            for warning in warnings:
+        if source is not None:
+            session = read_session(source.expanduser(), "auto" if args.source == "all" else args.source)
+            targets = destinations(session, args.format, args.output, full=args.full, redact=args.redact)
+            paths = write_exports(session, targets, not args.no_tools, args.force, full=args.full, redact=args.redact)
+            for warning in session.warnings:
                 print(f"Warning: {terminal_text(warning)}", file=sys.stderr)
-            if not candidates:
-                raise SessionError("No local sessions found. Supply a session file or use --codex-home / --claude-home.")
-            if args.plain_picker:
-                selected = pick(candidates)
-            else:
-                from .tui import pick_tui
-                selected, args.full = pick_tui(candidates, full=args.full, redact=args.redact)
+            for path in paths:
+                print(f"Exported: {terminal_text(str(path))}")
+            return 0
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            raise SessionError("No session file supplied. In a noninteractive terminal, pass a .jsonl or .json path: claudex-export SESSION_FILE")
+        candidates, warnings = discover_all(home, claude_home(args.claude_home), args.source, args.include_archived)
+        for warning in warnings:
+            print(f"Warning: {terminal_text(warning)}", file=sys.stderr)
+        if not candidates:
+            raise SessionError("No local sessions found. Supply a session file or use --codex-home / --claude-home.")
+        if args.plain_picker:
+            selected = pick(candidates)
             if selected is None:
                 print("Cancelled; no export written.")
                 return 0
-            source = selected.path
-        session = read_session(source.expanduser(), "auto" if args.source == "all" else args.source)
-        indexed = read_index(home).get(session.id, {}).get("thread_name") if session.provider == "codex" else None
-        session.title = str(indexed or (selected.title if selected else session.title))
-        targets = destinations(session, args.format, args.output, full=args.full, redact=args.redact)
-        paths = write_exports(session, targets, not args.no_tools, args.force, full=args.full, redact=args.redact)
-        for warning in session.warnings:
-            print(f"Warning: {terminal_text(warning)}", file=sys.stderr)
-        for path in paths:
-            print(f"Exported: {terminal_text(str(path))}")
-        return 0
+            paths, session_warnings = export_selection(selected, home, args.format, args.output, args.no_tools, args.force, full=args.full, redact=args.redact)
+            for warning in session_warnings:
+                print(f"Warning: {terminal_text(warning)}", file=sys.stderr)
+            for path in paths:
+                print(f"Exported: {terminal_text(str(path))}")
+            return 0
+        from .tui import pick_tui
+        selected, args.full = pick_tui(candidates, full=args.full, redact=args.redact, home=home, format=args.format, output=args.output, no_tools=args.no_tools, force=args.force)
+        if selected is None:
+            print("Cancelled.")
+            return 0
+        resume_session(selected)
+        return 0  # pragma: no cover - unreachable once execvp succeeds
     except KeyboardInterrupt:
         print("\nCancelled.", file=sys.stderr)
         return 130

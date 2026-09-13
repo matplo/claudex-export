@@ -11,8 +11,9 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Footer, Header, Input, Static, TextArea
 
+from .cli import export_selection
 from .discovery import Candidate, terminal_text
-from .session import read_session, user_prompts
+from .session import SessionError, read_session, user_prompts
 from .privacy import duration_text, prepare_export
 
 
@@ -88,10 +89,51 @@ class PreviewScreen(ModalScreen[Candidate | None]):
             self.dismiss(self.candidate)
 
 
+class ExportResultScreen(ModalScreen[None]):
+    BINDINGS = [Binding("enter,escape", "close", "Close", priority=True)]
+    DEFAULT_CSS = """
+    ExportResultScreen { align: center middle; background: $background 65%; }
+    #export-dialog { width: 80%; height: auto; max-height: 80%; border: round #a4c9bb; background: $surface; padding: 1 2; }
+    #export-title { color: #a4c9bb; text-style: bold; height: 1; }
+    #export-body { margin-top: 1; height: auto; }
+    #export-help { color: $text-muted; margin-top: 1; height: 1; }
+    """
+
+    def __init__(self, candidate: Candidate):
+        super().__init__()
+        self.candidate = candidate
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="export-dialog"):
+            yield Static("EXPORTING…", id="export-title")
+            yield Static("", id="export-body", markup=False)
+            yield Static("Enter / Esc: close", id="export-help")
+
+    def on_mount(self) -> None:
+        self.run_export()
+
+    @work(exclusive=True)
+    async def run_export(self) -> None:
+        app = self.app
+        try:
+            paths, warnings = await asyncio.to_thread(export_selection, self.candidate, app.home, app.format, app.output, app.no_tools, app.force, full=app.full, redact=app.redact)
+            title = "EXPORT COMPLETE"
+            lines = [terminal_text(str(path)) for path in paths] + [f"Warning: {terminal_text(warning)}" for warning in warnings]
+            body = "\n".join(lines) or "Nothing was written."
+        except (OSError, UnicodeError, SessionError) as exc:
+            title = "EXPORT FAILED"
+            body = terminal_text(str(exc))
+        self.query_one("#export-title", Static).update(title)
+        self.query_one("#export-body", Static).update(body)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class SessionPicker(App[Candidate | None]):
     TITLE = "Claudex Export"
     SUB_TITLE = "Codex + Claude Code"
-    BINDINGS = [Binding("v", "preview", "View prompts"), Binding("f", "toggle_full", "Full / sanitized"), Binding("slash", "search", "Search"), Binding("escape", "back", "Clear / focus list"), Binding("q", "cancel", "Quit"), Binding("ctrl+c", "cancel", "Quit", show=False, priority=True)]
+    BINDINGS = [Binding("v", "preview", "View prompts"), Binding("e", "export", "Export"), Binding("f", "toggle_full", "Full / sanitized"), Binding("slash", "search", "Search"), Binding("escape", "back", "Clear / focus list"), Binding("q", "cancel", "Quit"), Binding("ctrl+c", "cancel", "Quit", show=False, priority=True)]
     CSS = """
     Screen { background: #18262b; }
     Header { background: #25413f; }
@@ -104,12 +146,17 @@ class SessionPicker(App[Candidate | None]):
     Footer { background: #25413f; }
     """
 
-    def __init__(self, candidates: list[Candidate], *, full: bool = False, redact=()):
+    def __init__(self, candidates: list[Candidate], *, full: bool = False, redact=(), home=None, format: str = "html", output=None, no_tools: bool = False, force: bool = False):
         super().__init__()
         self.candidates = candidates
         self.matches = candidates
         self.full = full
         self.redact = redact
+        self.home = home
+        self.format = format
+        self.output = output
+        self.no_tools = no_tools
+        self.force = force
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -117,7 +164,7 @@ class SessionPicker(App[Candidate | None]):
         yield Static("", id="status", markup=False)
         yield Static("", id="mode", markup=False)
         yield DataTable(id="sessions", cursor_type="row", zebra_stripes=True)
-        yield Static("↑↓ navigate   •   Enter export   •   v preview first / last 10 prompts", id="help")
+        yield Static("↑↓ navigate   •   Enter resume   •   v preview   •   e export", id="help")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -163,9 +210,16 @@ class SessionPicker(App[Candidate | None]):
 
     def preview_closed(self, candidate: Candidate | None) -> None:
         if candidate:
-            self.exit(candidate)
+            self.export_candidate(candidate)
         else:
             self.query_one(DataTable).focus()
+
+    def action_export(self) -> None:
+        if candidate := self.selected():
+            self.export_candidate(candidate)
+
+    def export_candidate(self, candidate: Candidate) -> None:
+        self.push_screen(ExportResultScreen(candidate))
 
     def action_search(self) -> None:
         self.query_one(Input).focus()
@@ -187,6 +241,6 @@ class SessionPicker(App[Candidate | None]):
         self.update_mode()
 
 
-def pick_tui(candidates: list[Candidate], *, full: bool = False, redact=()) -> tuple[Candidate | None, bool]:
-    app = SessionPicker(candidates, full=full, redact=redact)
+def pick_tui(candidates: list[Candidate], *, full: bool = False, redact=(), home=None, format: str = "html", output=None, no_tools: bool = False, force: bool = False) -> tuple[Candidate | None, bool]:
+    app = SessionPicker(candidates, full=full, redact=redact, home=home, format=format, output=output, no_tools=no_tools, force=force)
     return app.run(), app.full

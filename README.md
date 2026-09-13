@@ -5,6 +5,12 @@ or **Markdown**. Run `claudex-export`
 without a filename to browse both providers in a full-screen Textual picker.
 Preview the first and last 10 user prompts before choosing a session.
 
+In the Textual picker, `Enter` resumes the selected session by exec'ing
+`claude --resume ID` or `codex resume ID` (whichever binary the session
+belongs to must be on `PATH`, and it runs from the session's original working
+directory when known). Press `e` to export instead; a modal reports the
+written file(s) or any error without leaving the picker.
+
 **Exports are sanitized by default.** They contain the session date, title,
 recorded elapsed time when available, direct user prompts, and assistant
 progress/final replies. Tools, execution plans, injected context, images,
@@ -65,11 +71,11 @@ provider names. Enter in the search box returns focus to the results.
 | Key | Action |
 | --- | --- |
 | `↑` / `↓` | Move between sessions |
-| `Enter` on a session | Select and export |
+| `Enter` on a session | Resume it: exec into `claude --resume ID` or `codex resume ID` |
 | `v` | Preview the selected session's user prompts |
+| `e` in list or preview | Export the selected/previewed session; a modal reports the result |
 | `f` in list or preview | Toggle sanitized/full export; current mode is displayed |
 | `Esc` / `v` in preview | Return to the list |
-| `e` in preview | Select and export the previewed session |
 | `/` | Focus search |
 | `Esc` in list | Clear search and focus the list |
 | `q` / `Ctrl+C` | Cancel |
