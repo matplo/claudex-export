@@ -1,4 +1,4 @@
-"""Command-line interface for Claudex Export and its aliases."""
+"""Command-line interface for Claudexer."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def write_exports(session: Session, targets: list[tuple[Path, str]], include_too
         path.parent.mkdir(parents=True, exist_ok=True)
         # Stage on the destination filesystem. Link provides exclusive creation
         # without a check/write race; replace handles explicit overwrites.
-        descriptor, temporary = tempfile.mkstemp(prefix=".codex-export-", dir=path.parent)
+        descriptor, temporary = tempfile.mkstemp(prefix=".claudexer-", dir=path.parent)
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
                 stream.write(content)
@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Exported: {terminal_text(str(path))}")
             return 0
         if not sys.stdin.isatty() or not sys.stdout.isatty():
-            raise SessionError("No session file supplied. In a noninteractive terminal, pass a .jsonl or .json path: claudex-export SESSION_FILE")
+            raise SessionError("No session file supplied. In a noninteractive terminal, pass a .jsonl or .json path: claudexer SESSION_FILE")
         candidates, warnings = discover_all(home, claude_home(args.claude_home), args.source, args.include_archived)
         for warning in warnings:
             print(f"Warning: {terminal_text(warning)}", file=sys.stderr)

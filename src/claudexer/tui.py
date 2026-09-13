@@ -131,7 +131,7 @@ class ExportResultScreen(ModalScreen[None]):
 
 
 class SessionPicker(App[Candidate | None]):
-    TITLE = "Claudex Export"
+    TITLE = "Claudexer"
     SUB_TITLE = "Codex + Claude Code"
     BINDINGS = [Binding("v", "preview", "View prompts"), Binding("e", "export", "Export"), Binding("f", "toggle_full", "Full / sanitized"), Binding("slash", "search", "Search"), Binding("escape", "back", "Clear / focus list"), Binding("q", "cancel", "Quit"), Binding("ctrl+c", "cancel", "Quit", show=False, priority=True)]
     CSS = """

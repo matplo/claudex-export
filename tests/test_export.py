@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_export.cli import destinations, main, write_exports
-from codex_export.discovery import Candidate, codex_home, discover, pick, terminal_text
-from codex_export.render import embedded_image, markdown_text, render_html, render_markdown
-from codex_export.session import Entry, Session, SessionError, read_session
+from claudexer.cli import destinations, main, write_exports
+from claudexer.discovery import Candidate, codex_home, discover, pick, terminal_text
+from claudexer.render import embedded_image, markdown_text, render_html, render_markdown
+from claudexer.session import Entry, Session, SessionError, read_session
 
 
 def record(kind, payload):

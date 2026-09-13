@@ -114,8 +114,8 @@ def render_html(session: Session, include_tools: bool = True, *, full: bool = Fa
     warning_html = ""
     if session.warnings:
         warning_html = '<details class="warnings"><summary>Export notes</summary><ul>' + "".join(f"<li>{escape(w)}</li>" for w in session.warnings) + "</ul></details>"
-    css = files("codex_export").joinpath("style.css").read_text(encoding="utf-8") + HtmlFormatter(style="friendly").get_style_defs(".highlight")
-    script = files("codex_export").joinpath("controls.js").read_text(encoding="utf-8")
+    css = files("claudexer").joinpath("style.css").read_text(encoding="utf-8") + HtmlFormatter(style="friendly").get_style_defs(".highlight")
+    script = files("claudexer").joinpath("controls.js").read_text(encoding="utf-8")
     script_hash = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
     count = sum(e.kind in {"user", "assistant"} for e in entries)
     tools = sum(e.kind == "tool" for e in entries)
@@ -134,7 +134,7 @@ def render_html(session: Session, include_tools: bool = True, *, full: bool = Fa
 <dl>{metadata_html}</dl>
 <div class="controls">{controls}<button type="button" id="print">Print / save PDF</button></div></section>
 {warning_html}<section class="transcript" aria-label="Conversation">{''.join(sections) or '<p class="muted">No conversation messages recorded.</p>'}</section>
-<footer>Exported locally with claudex-export</footer></main><script>{script}</script></body></html>'''
+<footer>Exported locally with claudexer</footer></main><script>{script}</script></body></html>'''
 
 
 def fence(text: str, language: str = "") -> str:

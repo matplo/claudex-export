@@ -4,12 +4,12 @@ from pathlib import Path
 
 from textual.widgets import Input, Static, TextArea
 
-from codex_export.cli import destinations, main
-from codex_export.discovery import Candidate
-from codex_export.privacy import prepare_export
-from codex_export.render import render_html, render_markdown
-from codex_export.session import Entry, Session, read_session
-from codex_export.tui import SessionPicker
+from claudexer.cli import destinations, main
+from claudexer.discovery import Candidate
+from claudexer.privacy import prepare_export
+from claudexer.render import render_html, render_markdown
+from claudexer.session import Entry, Session, read_session
+from claudexer.tui import SessionPicker
 
 
 def private_session():
@@ -138,8 +138,8 @@ def test_cli_resumes_tui_selection(tmp_path, monkeypatch):
     path = tmp_path / "session.jsonl"
     write_session(path)
     candidate = Candidate(path, "secret-id", "Alice session", "/Users/alice/project", 0)
-    monkeypatch.setattr("codex_export.cli.discover_all", lambda *args: ([candidate], []))
-    monkeypatch.setattr("codex_export.tui.pick_tui", lambda candidates, **kwargs: (candidate, True))
+    monkeypatch.setattr("claudexer.cli.discover_all", lambda *args: ([candidate], []))
+    monkeypatch.setattr("claudexer.tui.pick_tui", lambda candidates, **kwargs: (candidate, True))
     monkeypatch.setattr(sys, "stdin", Terminal())
     monkeypatch.setattr(sys, "stdout", Terminal())
     calls = []

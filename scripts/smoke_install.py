@@ -5,18 +5,18 @@ from importlib.resources import files
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from codex_export import __version__
-from codex_export.cli import main
-from codex_export.render import render_html, render_markdown
-from codex_export.session import Entry, Session
-from codex_export.tui import SessionPicker
+from claudexer import __version__
+from claudexer.cli import main
+from claudexer.render import render_html, render_markdown
+from claudexer.session import Entry, Session
+from claudexer.tui import SessionPicker
 
 
-package = distribution("claudex-export")
+package = distribution("claudexer")
 assert package.version == __version__
-assert {"claudex-export", "claude-export", "codex-export", "session-export"} <= {entry.name for entry in package.entry_points}
-assert files("codex_export").joinpath("style.css").is_file()
-assert files("codex_export").joinpath("controls.js").is_file()
+assert {"claudexer"} <= {entry.name for entry in package.entry_points}
+assert files("claudexer").joinpath("style.css").is_file()
+assert files("claudexer").joinpath("controls.js").is_file()
 for provider in ("codex", "claude"):
     session = Session(Path("smoke.jsonl"), title="Installed wheel smoke test", provider=provider,
                       entries=[Entry("user", "Hello"), Entry("assistant", "Done", phase="final_answer")])

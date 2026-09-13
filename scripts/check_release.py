@@ -14,7 +14,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit("Usage: python scripts/check_release.py vX.Y.Z")
     try:
-        check_tag(sys.argv[1], version("claudex-export"))
+        check_tag(sys.argv[1], version("claudexer"))
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     print(f"Verified release tag {sys.argv[1]}")

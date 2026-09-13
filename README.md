@@ -1,16 +1,13 @@
-# Claudex Export
+# Claudexer
 
-> **This project has been renamed to `claudexer`.** `claudex-export` 0.3.1 is
-> the final release under this name; it still works exactly as documented
-> below, but all future development, releases, and fixes happen at
-> [github.com/matplo/claudexer](https://github.com/matplo/claudexer) and
-> [pypi.org/project/claudexer](https://pypi.org/project/claudexer/). Please
-> switch to `pip install claudexer` (command: `claudexer`).
-
-Export local Codex and Claude Code conversations to readable **standalone HTML**
-or **Markdown**. Run `claudex-export`
+Browse local Codex and Claude Code sessions, resume one where you left off, or
+export it to readable **standalone HTML** or **Markdown**. Run `claudexer`
 without a filename to browse both providers in a full-screen Textual picker.
 Preview the first and last 10 user prompts before choosing a session.
+
+This project was previously published as `claudex-export`; see its
+[final release notes](https://pypi.org/project/claudex-export/) if you're
+migrating from that name.
 
 In the Textual picker, `Enter` resumes the selected session by exec'ing
 `claude --resume ID` or `codex resume ID` (whichever binary the session
@@ -30,45 +27,43 @@ Requires Python 3.10 or later. No API key or service is needed.
 ## Install
 
 ```bash
-python -m pip install claudex-export
+python -m pip install claudexer
 ```
 
 Or install it as an isolated command-line application with
-`pipx install claudex-export`. The commands `claudex-export`, `claude-export`,
-`codex-export`, and the compatibility alias `session-export` launch the same
-tool and support both providers. Python and its dependencies are sufficient; `henv` is
+`pipx install claudexer`. Python and its dependencies are sufficient; `henv` is
 only used for development in this repository.
 
 ## Usage
 
 ```bash
 # Browse and search local sessions; HTML is the default
-claudex-export
+claudexer
 
 # Browse only Claude Code sessions
-claudex-export --source claude
+claudexer --source claude
 
 # Auto-detect a Claude Code file and export both formats
-claudex-export /path/to/claude-session.jsonl --format both -o exports
+claudexer /path/to/claude-session.jsonl --format both -o exports
 
 # Opt in to metadata, original messages, tool details, and images
-claudex-export /path/to/session.jsonl --full -o detailed.html
+claudexer /path/to/session.jsonl --full -o detailed.html
 
 # Remove additional names or literal strings from sanitized output
-claudex-export /path/to/session.jsonl --redact 'Jane Doe' --redact 'Acme Private Project'
+claudexer /path/to/session.jsonl --redact 'Jane Doe' --redact 'Acme Private Project'
 
 # Export a specified rollout
-claudex-export /path/to/rollout.jsonl -o conversation.html
+claudexer /path/to/rollout.jsonl -o conversation.html
 
 # Markdown, without tool calls/results
-claudex-export /path/to/rollout.jsonl --format md --no-tools -o conversation.md
+claudexer /path/to/rollout.jsonl --format md --no-tools -o conversation.md
 
 # Both formats, into a directory
-claudex-export /path/to/rollout.jsonl --format both -o exports
+claudexer /path/to/rollout.jsonl --format both -o exports
 
 # Include archived sessions, or use another Codex home
-claudex-export --include-archived
-claudex-export --codex-home /path/to/.codex
+claudexer --include-archived
+claudexer --codex-home /path/to/.codex
 ```
 
 The Textual picker supports arrow keys, Page Up/Down, and mouse navigation.
@@ -206,9 +201,9 @@ and add a **pending GitHub publisher** with these exact values:
 
 | Field | Value |
 | --- | --- |
-| PyPI project name | `claudex-export` |
+| PyPI project name | `claudexer` |
 | GitHub owner | `matplo` |
-| Repository | `claudex-export` |
+| Repository | `claudexer` |
 | Workflow filename | `release.yml` |
 | Environment name | `pypi` |
 
@@ -221,7 +216,7 @@ the pending publisher.
 
 ### Publish a version
 
-Set `__version__` in `src/codex_export/__init__.py` (the single version source),
+Set `__version__` in `src/claudexer/__init__.py` (the single version source),
 commit the change, and push a matching tag. For the initial `0.1.0` release:
 
 ```bash

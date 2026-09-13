@@ -5,12 +5,12 @@ import sys
 
 from textual.widgets import DataTable, Input, TextArea
 
-from codex_export.cli import main
-from codex_export.discovery import Candidate, discover_all, discover_claude
-from codex_export.render import render_html, render_markdown
-from codex_export.session import read_session, user_prompts
-from codex_export import tui as tui_module
-from codex_export.tui import ExportResultScreen, PreviewScreen, SessionPicker, prompt_preview
+from claudexer.cli import main
+from claudexer.discovery import Candidate, discover_all, discover_claude
+from claudexer.render import render_html, render_markdown
+from claudexer.session import read_session, user_prompts
+from claudexer import tui as tui_module
+from claudexer.tui import ExportResultScreen, PreviewScreen, SessionPicker, prompt_preview
 
 
 def claude(kind, content, uuid, **extra):
