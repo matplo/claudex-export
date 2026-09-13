@@ -1,5 +1,12 @@
 # Claudex Export
 
+> **This project has been renamed to `claudexer`.** `claudex-export` 0.3.1 is
+> the final release under this name; it still works exactly as documented
+> below, but all future development, releases, and fixes happen at
+> [github.com/matplo/claudexer](https://github.com/matplo/claudexer) and
+> [pypi.org/project/claudexer](https://pypi.org/project/claudexer/). Please
+> switch to `pip install claudexer` (command: `claudexer`).
+
 Export local Codex and Claude Code conversations to readable **standalone HTML**
 or **Markdown**. Run `claudex-export`
 without a filename to browse both providers in a full-screen Textual picker.

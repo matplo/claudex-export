@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "claudex-export"
 dynamic = ["version"]
-description = "Export Codex and Claude Code sessions with a Textual browser and prompt previews"
+description = "Renamed to claudexer -- see https://pypi.org/project/claudexer/"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -14,7 +14,7 @@ requires-python = ">=3.10"
 dependencies = ["markdown-it-py>=3,<5", "Pygments>=2.17,<3", "textual>=8.2,<9"]
 keywords = ["codex", "claude", "sessions", "markdown", "html", "textual"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 7 - Inactive",
     "Environment :: Console",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
